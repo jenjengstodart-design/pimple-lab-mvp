@@ -59,6 +59,9 @@ async function analyze_with_medgemma(imageUrl: string, context: any): Promise<{
   if (!process.env.HF_TOKEN) {
     throw new Error("HF_TOKEN environment variable is not set");
   }
+  if (!process.env.MEDGEMMA_ENDPOINT) {
+    throw new Error("MEDGEMMA_ENDPOINT environment variable is not set");
+  }
 
   // Read image from disk and encode as base64
   const imagePath = path.join(process.cwd(), imageUrl);
@@ -74,7 +77,8 @@ async function analyze_with_medgemma(imageUrl: string, context: any): Promise<{
   "experiment_hypothesis": "<string>"
 }`;
 
-  const response = await fetch("https://router.huggingface.co/v1/chat/completions", {
+  const endpointUrl = `${process.env.MEDGEMMA_ENDPOINT}/v1/chat/completions`;
+  const response = await fetch(endpointUrl, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${process.env.HF_TOKEN}`,
