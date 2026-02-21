@@ -99,7 +99,10 @@ async function analyze_with_medgemma(imageUrl: string, context: any): Promise<{
   const raw = await response.json();
   console.log("[MedGemma] Raw response:", JSON.stringify(raw, null, 2));
 
-  const content: string = raw.choices?.[0]?.message?.content ?? "";
+  // HF inference toolkit returns [{ generated_text: "..." }]
+  const content: string = Array.isArray(raw)
+    ? (raw[0]?.generated_text ?? "")
+    : (raw?.generated_text ?? "");
 
   // Extract JSON safely — strip any surrounding markdown fences if present
   const jsonMatch = content.match(/\{[\s\S]*\}/);
