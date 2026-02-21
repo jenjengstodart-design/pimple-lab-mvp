@@ -1,0 +1,83 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: 'Outfit', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+
+  /* Soft, scientific, approachable palette */
+  /* White/Neutral background */
+  --background: 210 20% 98%;
+  --foreground: 224 71% 4%;
+
+  /* Soft Teal/Mint - Primary Action */
+  --primary: 173 58% 39%;
+  --primary-foreground: 0 0% 100%;
+
+  /* Soft Coral - Accent for "Skin" context */
+  --accent: 12 76% 85%;
+  --accent-foreground: 12 80% 30%;
+
+  /* Clean Slate - Secondary/Muted */
+  --secondary: 210 20% 94%;
+  --secondary-foreground: 220 10% 20%;
+
+  --muted: 210 20% 94%;
+  --muted-foreground: 220 10% 46%;
+
+  /* Destructive */
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 210 40% 98%;
+
+  --border: 220 13% 91%;
+  --input: 220 13% 91%;
+  --ring: 173 58% 39%;
+
+  --radius: 1rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-body);
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    @apply font-semibold tracking-tight;
+  }
+}
+
+/* Custom Utilities for Glassmorphism & Depth */
+@layer utilities {
+  .glass-panel {
+    @apply bg-white/70 backdrop-blur-md border border-white/20 shadow-xl shadow-black/5;
+  }
+  
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-teal-600;
+  }
+
+  .card-hover {
+    @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-lg;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-muted-foreground/20 rounded-full;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground/40;
+}

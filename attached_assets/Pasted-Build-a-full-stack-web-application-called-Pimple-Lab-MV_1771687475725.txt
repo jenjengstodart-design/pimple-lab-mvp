@@ -1,0 +1,102 @@
+Build a full-stack web application called "Pimple Lab – MVP".
+
+Purpose:
+This is a hackathon MVP demonstrating how MedGemma can help structure teenage acne experimentation. This is NOT a medical diagnostic tool. It is educational and experimental only.
+
+STACK:
+- Node.js backend (Express)
+- Simple frontend (HTML + minimal CSS or React if easier)
+- SQLite database
+- Store uploaded images locally
+- Prepare for HuggingFace endpoint integration
+
+CORE FEATURES:
+
+1. Home Page
+- Title: Pimple Lab
+- Subtitle: Turn teenage skincare into a science experiment
+- Clear disclaimer:
+  "This tool is not medical advice. It is for educational experimentation only."
+- Button: Start Experiment
+
+2. Initial Snapshot Page
+Collect:
+- Upload facial skin image
+- Age (number input)
+- Stress level (1–5)
+- Daily makeup? (yes/no)
+- Sport frequency (low/medium/high)
+- Optional menstrual cycle phase
+
+On submit:
+Call backend function analyze_with_medgemma(image, context)
+
+3. MedGemma Wrapper (IMPORTANT)
+Create a backend function called:
+
+async function analyze_with_medgemma(imageBase64, context)
+
+Inside it:
+- Prepare structured prompt
+- Send POST request to HuggingFace endpoint using process.env.HF_TOKEN
+- Return structured JSON
+
+If environment variable USE_REAL_MEDGEMMA is false:
+Return mock response:
+
+{
+  acne_type: "Hormonal",
+  confidence: 72,
+  visual_features: ["Inflammatory papules along jawline"],
+  context_factors: ["High stress reported"],
+  experiment_hypothesis: "A salicylic acid routine may reduce inflammation over 14 days."
+}
+
+4. Hypothesis Page
+Display:
+- Acne type
+- Confidence %
+- Visual reasoning summary
+- Suggested experiment hypothesis
+
+Allow user to:
+- Accept or override acne type
+- Write routine description
+- Choose experiment duration (7 or 14 days)
+
+5. Superdrug Product Suggestions
+Create a local dataset of 12 acne-friendly Superdrug products with:
+- name
+- category (salicylic acid, benzoyl peroxide, antifungal-friendly, gentle cleanser, oil-free moisturiser)
+- price placeholder
+- link placeholder
+
+Map acne type to 3 recommended products.
+
+6. Daily Check-In
+- Adherence slider (0–100%)
+- Stress level
+- Makeup today? yes/no
+Save entries to database.
+
+7. Follow-Up Snapshot
+- Upload second image
+- Self-assess: Better / Same / Worse
+
+8. Results Page
+Show:
+- Before/After images side-by-side
+- Hypothesis
+- Average adherence
+- Outcome summary
+- Statement: "This contributes to structured teenage skincare research."
+
+TECHNICAL REQUIREMENTS:
+- Use environment variable HF_TOKEN for HuggingFace auth
+- Use environment variable USE_REAL_MEDGEMMA
+- Keep code clean and well-commented
+- Prepare analyze_with_medgemma() for easy endpoint insertion
+- Mobile responsive
+
+Do not overengineer.
+This is a working MVP for a hackathon.

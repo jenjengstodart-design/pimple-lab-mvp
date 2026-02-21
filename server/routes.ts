@@ -1,0 +1,252 @@
+import type { Express } from "express";
+import { type Server } from "http";
+import { storage } from "./storage";
+import { api } from "@shared/routes";
+import { z } from "zod";
+import fs from "fs";
+import path from "path";
+import express from "express";
+import { randomUUID } from "crypto";
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Helper to save base64 image and return URL
+function saveBase64Image(base64Data: string): string {
+  const matches = base64Data.match(/^data:image\/([A-Za-z-+\/]+);base64,(.+)$/);
+  
+  if (!matches || matches.length !== 3) {
+    throw new Error('Invalid base64 string');
+  }
+
+  let extension = matches[1];
+  if (extension === 'jpeg') extension = 'jpg';
+  
+  const imageData = Buffer.from(matches[2], 'base64');
+  const filename = `${randomUUID()}.${extension}`;
+  const filepath = path.join(uploadsDir, filename);
+  
+  fs.writeFileSync(filepath, imageData);
+  
+  return `/uploads/${filename}`;
+}
+
+const SUPERDRUG_PRODUCTS = [
+  { id: "1", name: "CeraVe SA Smoothing Cleanser", category: "salicylic acid", price: "£14.00", link: "https://www.superdrug.com" },
+  { id: "2", name: "The Ordinary Salicylic Acid 2% Solution", category: "salicylic acid", price: "£6.30", link: "https://www.superdrug.com" },
+  { id: "3", name: "Me+ Salicylic Acid & Ceramide Cleanser", category: "salicylic acid", price: "£7.99", link: "https://www.superdrug.com" },
+  { id: "4", name: "Acnecide Face Gel Spot Treatment 5%", category: "benzoyl peroxide", price: "£11.99", link: "https://www.superdrug.com" },
+  { id: "5", name: "Acnecide Face Wash 5%", category: "benzoyl peroxide", price: "£11.99", link: "https://www.superdrug.com" },
+  { id: "6", name: "Cetaphil Gentle Skin Cleanser", category: "gentle cleanser", price: "£10.00", link: "https://www.superdrug.com" },
+  { id: "7", name: "Simple Water Boost Micellar Gel Wash", category: "gentle cleanser", price: "£5.99", link: "https://www.superdrug.com" },
+  { id: "8", name: "Neutrogena Clear & Defend Oil-Free Moisturiser", category: "oil-free moisturiser", price: "£7.50", link: "https://www.superdrug.com" },
+  { id: "9", name: "e.l.f. Skin Superhydrate Moisturiser", category: "oil-free moisturiser", price: "£12.00", link: "https://www.superdrug.com" },
+  { id: "10", name: "Nizoral Anti-Dandruff Shampoo (for fungal acne)", category: "antifungal-friendly", price: "£6.50", link: "https://www.superdrug.com" },
+  { id: "11", name: "Starface Hydro-Stars", category: "spot treatment", price: "£11.99", link: "https://www.superdrug.com" },
+  { id: "12", name: "Byoma Creamy Jelly Cleanser", category: "gentle cleanser", price: "£9.99", link: "https://www.superdrug.com" },
+];
+
+async function analyze_with_medgemma(imageBase64: string, context: any) {
+  console.log("USE_REAL_MEDGEMMA:", process.env.USE_REAL_MEDGEMMA);
+  if (process.env.USE_REAL_MEDGEMMA !== "true") {
+    // Mock response for hackathon MVP
+    return {
+      acne_type: "Hormonal",
+      confidence: 72,
+      visual_features: ["Inflammatory papules along jawline"],
+      context_factors: [`Stress: ${context.stressLevel}/5`, `Sport: ${context.sportFrequency}`],
+      experiment_hypothesis: "A salicylic acid routine may reduce inflammation over 14 days."
+    };
+  }
+
+  try {
+    if (!process.env.MEDGEMMA_ENDPOINT) {
+      throw new Error("MEDGEMMA_ENDPOINT is not set");
+    }
+
+    const response = await fetch(process.env.MEDGEMMA_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.HF_TOKEN}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        inputs: {
+          image: imageBase64,
+          text: "Analyze this teenage facial skin image. Respond ONLY in valid JSON with keys: acne_type, confidence (0-100), visual_features (array), context_factors (array), experiment_hypothesis."
+        }
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HF API error: ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error("MedGemma error:", error);
+    // Fallback to mock on error
+    return {
+      acne_type: "Unknown",
+      confidence: 50,
+      visual_features: ["Unable to analyze"],
+      context_factors: ["Error connecting to model"],
+      experiment_hypothesis: "Maintain a gentle cleansing routine."
+    };
+  }
+}
+
+export async function registerRoutes(
+  httpServer: Server,
+  app: Express
+): Promise<Server> {
+  
+  // Serve uploaded images statically
+  app.use('/uploads', express.static(uploadsDir));
+
+  app.post(api.experiments.create.path, async (req, res) => {
+    try {
+      const input = api.experiments.create.input.parse(req.body);
+      
+      const imageUrl = saveBase64Image(input.imageBase64);
+      
+      const experiment = await storage.createExperiment({
+        age: input.age,
+        stressLevel: input.stressLevel,
+        makeup: input.makeup,
+        sportFrequency: input.sportFrequency,
+        menstrualCyclePhase: input.menstrualCyclePhase,
+        initialImageUrl: imageUrl,
+      });
+      
+      res.status(201).json(experiment);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({
+          message: err.errors[0].message,
+          field: err.errors[0].path.join('.'),
+        });
+      }
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get(api.experiments.get.path, async (req, res) => {
+    const experiment = await storage.getExperiment(Number(req.params.id));
+    if (!experiment) {
+      return res.status(404).json({ message: "Experiment not found" });
+    }
+    res.json(experiment);
+  });
+
+  app.patch(api.experiments.update.path, async (req, res) => {
+    try {
+      const input = api.experiments.update.input.parse(req.body);
+      const experiment = await storage.updateExperiment(Number(req.params.id), input);
+      if (!experiment) {
+        return res.status(404).json({ message: "Experiment not found" });
+      }
+      res.json(experiment);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({
+          message: err.errors[0].message,
+          field: err.errors[0].path.join('.'),
+        });
+      }
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post(api.experiments.analyze.path, async (req, res) => {
+    const experiment = await storage.getExperiment(Number(req.params.id));
+    if (!experiment) {
+      return res.status(404).json({ message: "Experiment not found" });
+    }
+
+    const analysis = await analyze_with_medgemma(experiment.initialImageUrl, {
+      age: experiment.age,
+      stressLevel: experiment.stressLevel,
+      sportFrequency: experiment.sportFrequency
+    });
+
+    await storage.updateExperiment(experiment.id, {
+      acneType: analysis.acne_type,
+      confidence: analysis.confidence,
+      visualFeatures: analysis.visual_features,
+      contextFactors: analysis.context_factors,
+      hypothesis: analysis.experiment_hypothesis
+    });
+
+    res.json(analysis);
+  });
+
+  app.post(api.experiments.followUp.path, async (req, res) => {
+    try {
+      const input = api.experiments.followUp.input.parse(req.body);
+      const imageUrl = saveBase64Image(input.imageBase64);
+      
+      const experiment = await storage.updateExperiment(Number(req.params.id), {
+        followUpImageUrl: imageUrl,
+        outcome: input.outcome
+      });
+      
+      if (!experiment) {
+        return res.status(404).json({ message: "Experiment not found" });
+      }
+      
+      res.json(experiment);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({
+          message: err.errors[0].message,
+          field: err.errors[0].path.join('.'),
+        });
+      }
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get(api.experiments.getCheckins.path, async (req, res) => {
+    const checkins = await storage.getCheckins(Number(req.params.id));
+    res.json(checkins);
+  });
+
+  app.post(api.experiments.addCheckin.path, async (req, res) => {
+    try {
+      const input = api.experiments.addCheckin.input.parse(req.body);
+      const checkin = await storage.createCheckin({
+        ...input,
+        experimentId: Number(req.params.id)
+      });
+      res.status(201).json(checkin);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({
+          message: err.errors[0].message,
+          field: err.errors[0].path.join('.'),
+        });
+      }
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get(api.products.list.path, async (req, res) => {
+    // Return 3 products, ideally matching the acneType if provided
+    // For MVP, we'll just filter slightly or return random 3
+    const type = req.query.acneType as string;
+    let filtered = SUPERDRUG_PRODUCTS;
+    
+    if (type && type.toLowerCase().includes("hormonal")) {
+      filtered = SUPERDRUG_PRODUCTS.filter(p => p.category.includes("salicylic") || p.category.includes("gentle"));
+    }
+    
+    // Return top 3
+    res.json(filtered.slice(0, 3));
+  });
+
+  return httpServer;
+}
