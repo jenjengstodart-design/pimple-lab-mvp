@@ -77,33 +77,17 @@ async function analyze_with_medgemma(imageUrl: string, context: any): Promise<{
   "experiment_hypothesis": "<string>"
 }`;
 
-  const endpointUrl = `${process.env.MEDGEMMA_ENDPOINT}/v1/chat/completions`;
-  const response = await fetch(endpointUrl, {
+  const inputs = `![](data:image/jpeg;base64,${base64Image})\n${prompt}`;
+
+  const response = await fetch(process.env.MEDGEMMA_ENDPOINT, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${process.env.HF_TOKEN}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      model: "google/medgemma-4b-it",
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:image/jpeg;base64,${base64Image}`
-              }
-            },
-            {
-              type: "text",
-              text: prompt
-            }
-          ]
-        }
-      ],
-      max_tokens: 512
+      inputs,
+      parameters: { max_new_tokens: 512 }
     })
   });
 
