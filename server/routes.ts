@@ -49,54 +49,85 @@ const SUPERDRUG_PRODUCTS = [
   { id: "12", name: "Byoma Creamy Jelly Cleanser", category: "gentle cleanser", price: "£9.99", link: "https://www.superdrug.com" },
 ];
 
-async function analyze_with_medgemma(imageBase64: string, context: any) {
-  console.log("USE_REAL_MEDGEMMA:", process.env.USE_REAL_MEDGEMMA);
-  if (process.env.USE_REAL_MEDGEMMA !== "true") {
-    // Mock response for hackathon MVP
-    return {
-      acne_type: "Hormonal",
-      confidence: 72,
-      visual_features: ["Inflammatory papules along jawline"],
-      context_factors: [`Stress: ${context.stressLevel}/5`, `Sport: ${context.sportFrequency}`],
-      experiment_hypothesis: "A salicylic acid routine may reduce inflammation over 14 days."
-    };
+async function analyze_with_medgemma(imageUrl: string, context: any): Promise<{
+  acne_type: string;
+  confidence: number;
+  visual_features: string[];
+  context_factors: string[];
+  experiment_hypothesis: string;
+}> {
+  if (!process.env.HF_TOKEN) {
+    throw new Error("HF_TOKEN environment variable is not set");
   }
 
-  try {
-    if (!process.env.MEDGEMMA_ENDPOINT) {
-      throw new Error("MEDGEMMA_ENDPOINT is not set");
-    }
+  // Read image from disk and encode as base64
+  const imagePath = path.join(process.cwd(), imageUrl);
+  const imageBuffer = fs.readFileSync(imagePath);
+  const base64Image = imageBuffer.toString("base64");
 
-    const response = await fetch(process.env.MEDGEMMA_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.HF_TOKEN}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        inputs: {
-          image: imageBase64,
-          text: "Analyze this teenage facial skin image. Respond ONLY in valid JSON with keys: acne_type, confidence (0-100), visual_features (array), context_factors (array), experiment_hypothesis."
+  const prompt = `Analyze this skin image for acne. Respond ONLY with valid JSON (no markdown, no code blocks) with exactly these keys:
+{
+  "acne_type": "<string: e.g. Hormonal, Cystic, Comedonal, Fungal, Inflammatory>",
+  "confidence": <number 0-100>,
+  "visual_features": ["<observation>"],
+  "context_factors": ["<factor>"],
+  "experiment_hypothesis": "<string>"
+}`;
+
+  const response = await fetch("https://router.huggingface.co/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.HF_TOKEN}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "google/medgemma-4b-it",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:image/jpeg;base64,${base64Image}`
+              }
+            },
+            {
+              type: "text",
+              text: prompt
+            }
+          ]
         }
-      })
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HF API error: ${response.statusText}`);
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error("MedGemma error:", error);
-    // Fallback to mock on error
-    return {
-      acne_type: "Unknown",
-      confidence: 50,
-      visual_features: ["Unable to analyze"],
-      context_factors: ["Error connecting to model"],
-      experiment_hypothesis: "Maintain a gentle cleansing routine."
-    };
+      ],
+      max_tokens: 512
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`HF API error ${response.status}: ${errorText}`);
   }
+
+  const raw = await response.json();
+  console.log("[MedGemma] Raw response:", JSON.stringify(raw, null, 2));
+
+  const content: string = raw.choices?.[0]?.message?.content ?? "";
+
+  // Extract JSON safely — strip any surrounding markdown fences if present
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    throw new Error(`No JSON found in model output: ${content}`);
+  }
+
+  const parsed = JSON.parse(jsonMatch[0]);
+
+  return {
+    acne_type: String(parsed.acne_type ?? "Unknown"),
+    confidence: Number(parsed.confidence ?? 50),
+    visual_features: Array.isArray(parsed.visual_features) ? parsed.visual_features.map(String) : [],
+    context_factors: Array.isArray(parsed.context_factors) ? parsed.context_factors.map(String) : [],
+    experiment_hypothesis: String(parsed.experiment_hypothesis ?? "Maintain a consistent skincare routine.")
+  };
 }
 
 export async function registerRoutes(
