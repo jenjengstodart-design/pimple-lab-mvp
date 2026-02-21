@@ -13,22 +13,25 @@ export default function Hypothesis() {
   const [match, params] = useRoute("/experiments/:id/hypothesis");
   const [, navigate] = useLocation();
   const id = Number(params?.id);
-  
+
   const { data: experiment, isLoading } = useExperiment(id);
   const { mutate: analyze, isPending: isAnalyzing } = useAnalyzeExperiment();
   const { mutate: update, isPending: isUpdating } = useUpdateExperiment();
-  
+
   // Local state for the form since we need to populate it after analysis
   const [routineDesc, setRoutineDesc] = useState("");
   const [duration, setDuration] = useState("7");
   const [selectedAcneType, setSelectedAcneType] = useState<string>("");
 
-  // Trigger analysis if not present
+  const [analysisAttempted, setAnalysisAttempted] = useState(false);
+
+  // Trigger analysis once if not already done
   useEffect(() => {
-    if (experiment && !experiment.acneType && !isAnalyzing) {
+    if (experiment && !experiment.acneType && !isAnalyzing && !analysisAttempted) {
+      setAnalysisAttempted(true);
       analyze(id);
     }
-  }, [experiment, id, analyze, isAnalyzing]);
+  }, [experiment, id, analyze, isAnalyzing, analysisAttempted]);
 
   // Sync state when experiment loads
   useEffect(() => {
@@ -83,7 +86,7 @@ export default function Hypothesis() {
               <SparklesIcon className="w-5 h-5 text-yellow-500" />
               AI Skin Analysis
             </h2>
-            
+
             {isAnalyzing ? (
               <div className="py-12 flex flex-col items-center justify-center text-center space-y-3">
                 <Loader2 className="w-10 h-10 text-primary animate-spin" />
@@ -101,7 +104,7 @@ export default function Hypothesis() {
                       </span>
                     </div>
                   </div>
-                  
+
                   {experiment.hypothesis && (
                     <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
                       <p className="text-sm font-medium text-blue-800 mb-1">Suggested Hypothesis</p>
@@ -126,9 +129,9 @@ export default function Hypothesis() {
                 </div>
 
                 <div className="relative rounded-xl overflow-hidden h-64 bg-black/5">
-                  <img 
-                    src={experiment.initialImageUrl} 
-                    alt="Initial scan" 
+                  <img
+                    src={experiment.initialImageUrl}
+                    alt="Initial scan"
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute bottom-0 inset-x-0 bg-black/60 p-3">
@@ -148,14 +151,14 @@ export default function Hypothesis() {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">What will you change?</label>
-                  <Textarea 
+                  <Textarea
                     placeholder="e.g. Using Salicylic Acid cleanser twice daily..."
                     className="bg-white/50 min-h-[100px]"
                     value={routineDesc}
                     onChange={(e) => setRoutineDesc(e.target.value)}
                   />
                 </div>
-                
+
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Duration</label>
                   <div className="grid grid-cols-2 gap-4">
